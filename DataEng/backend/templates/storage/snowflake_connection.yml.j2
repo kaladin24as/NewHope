@@ -1,0 +1,17 @@
+# Snowflake Connection Configuration
+# This file contains connection parameters for Snowflake data warehouse
+
+account: {{ account }}
+user: {{ user }}
+password: {{ password }}
+warehouse: {{ warehouse }}
+database: {{ database }}
+schema: {{ schema }}
+role: ACCOUNTADMIN
+
+# Connection options
+authenticator: snowflake
+client_session_keep_alive: true
+
+# Performance settings
+query_tag: antigravity_generated_project

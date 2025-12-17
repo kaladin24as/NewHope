@@ -1,0 +1,68 @@
+# Data Sources Configuration
+# This file defines external data sources for extraction
+
+sources:
+{% for source in sources %}
+  - name: {{ source.name }}
+    type: {{ source.type }}
+    connector: {{ source.connector }}
+    enabled: {{ source.enabled | default(true) }}
+    
+    config:
+      base_url: {{ source.config.base_url }}
+      {% if source.config.description -%}
+      description: "{{ source.config.description }}"
+      {%- endif %}
+      
+      {% if source.config.endpoints -%}
+      endpoints:
+        {% for endpoint in source.config.endpoints %}
+        - name: {{ endpoint.name }}
+          path: {{ endpoint.path }}
+          method: {{ endpoint.method | default('GET') }}
+          {% if endpoint.params -%}
+          params:
+            {% for key, value in endpoint.params.items() %}
+            {{ key }}: {{ value }}
+            {% endfor %}
+          {%- endif %}
+          {% if endpoint.data_path -%}
+          data_path: "{{ endpoint.data_path }}"
+          {%- endif %}
+        {% endfor %}
+      {%- endif %}
+    
+    auth:
+      type: {{ source.auth.type }}
+      {% if source.auth.type == 'api_key' -%}
+      location: {{ source.auth.location | default('header') }}  # header or query
+      key_name: {{ source.auth.key_name | default('X-API-Key') }}
+      env_var: {{ source.name | upper }}_API_KEY
+      
+      {% elif source.auth.type == 'bearer' -%}
+      env_var: {{ source.name | upper }}_API_TOKEN
+      
+      {% elif source.auth.type == 'oauth2' -%}
+      client_id_env: {{ source.name | upper }}_CLIENT_ID
+      client_secret_env: {{ source.name | upper }}_CLIENT_SECRET
+      token_url: {{ source.auth.token_url }}
+      
+      {% elif source.auth.type == 'basic' -%}
+      username_env: {{ source.name | upper }}_USERNAME
+      password_env: {{ source.name | upper }}_PASSWORD
+      {%- endif %}
+    
+    {% if source.schedule -%}
+    schedule: "{{ source.schedule }}"  # Cron expression
+    {%- else -%}
+    schedule: "0 */6 * * *"  # Default: every 6 hours
+    {%- endif %}
+    
+    {% if source.metadata -%}
+    metadata:
+      {% for key, value in source.metadata.items() %}
+      {{ key }}: {{ value }}
+      {% endfor %}
+    {%- endif %}
+
+{% endfor %}

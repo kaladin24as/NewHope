@@ -1,0 +1,178 @@
+# Example Data Sources Configuration
+# This file shows examples of different data source configurations
+
+sources:
+  # Example 1: Public API with API Key authentication
+  - name: weather_api
+    type: api
+    connector: REST_API
+    enabled: true
+    
+    config:
+      base_url: https://api.openweathermap.org/data/2.5
+      description: "OpenWeather API for weather data"
+      test_endpoint: /weather?q=London
+      endpoint_name: current_weather
+      endpoint: /weather
+      params:
+        q: "London"
+        units: "metric"
+      endpoints:
+        - name: current_weather
+          path: /weather
+          method: GET
+          params:
+            units: "metric"
+    
+    auth:
+      type: api_key
+      location: query  # API key goes in query parameter
+      key_name: appid
+    
+    schedule: "0 */3 * * *"  # Every 3 hours
+    
+    metadata:
+      category: "weather"
+      data_format: "json"
+
+  # Example 2: REST API with Bearer Token
+  - name: github_api
+    type: api
+    connector: REST_API
+    enabled: true
+    
+    config:
+      base_url: https://api.github.com
+      description: "GitHub API for repository data"
+      test_endpoint: /
+      endpoint_name: repos
+      endpoint: /user/repos
+      endpoints:
+        - name: repos
+          path: /user/repos
+          method: GET
+        - name: issues
+          path: /repos/{owner}/{repo}/issues
+          method: GET
+    
+    auth:
+      type: bearer
+    
+    schedule: "0 0 * * *"  # Daily at midnight
+    
+    metadata:
+      category: "development"
+      rate_limit: "5000/hour"
+
+  # Example 3: Enterprise API with OAuth2
+  - name: salesforce_crm
+    type: api
+    connector: REST_API
+    enabled: false  # Disabled by default until configured
+    
+    config:
+      base_url: https://your-instance.salesforce.com/services/data/v58.0
+      description: "Salesforce CRM data"
+      test_endpoint: /
+      endpoint_name: accounts
+      endpoint: /query
+      params:
+        q: "SELECT Id, Name, Industry FROM Account LIMIT 100"
+      endpoints:
+        - name: accounts
+          path: /query
+          method: GET
+          data_path: "records"
+        - name: opportunities
+          path: /query
+          method: GET
+          data_path: "records"
+    
+    auth:
+      type: oauth2
+      token_url: https://login.salesforce.com/services/oauth2/token
+    
+    schedule: "0 0 * * *"  # Daily
+    
+    metadata:
+      category: "crm"
+      data_retention: "90 days"
+
+  # Example 4: Public API without authentication
+  - name: jsonplaceholder
+    type: api
+    connector: REST_API
+    enabled: true
+    
+    config:
+      base_url: https://jsonplaceholder.typicode.com
+      description: "JSONPlaceholder fake REST API for testing"
+      test_endpoint: /posts/1
+      endpoint_name: posts
+      endpoint: /posts
+      endpoints:
+        - name: posts
+          path: /posts
+          method: GET
+        - name: users
+          path: /users
+          method: GET
+        - name: comments
+          path: /comments
+          method: GET
+    
+    auth:
+      type: none
+    
+    schedule: "0 */12 * * *"  # Every 12 hours
+    
+    metadata:
+      category: "testing"
+      purpose: "development testing"
+
+  # Example 5: API with Basic Auth
+  - name: internal_api
+    type: api
+    connector: REST_API
+    enabled: false
+    
+    config:
+      base_url: https://api.internal.company.com
+      description: "Internal company API"
+      test_endpoint: /health
+      endpoint_name: employees
+      endpoint: /api/v1/employees
+      endpoints:
+        - name: employees
+          path: /api/v1/employees
+          method: GET
+        - name: departments
+          path: /api/v1/departments
+          method: GET
+    
+    auth:
+      type: basic
+    
+    schedule: "0 */6 * * *"  # Every 6 hours
+    
+    metadata:
+      category: "hr"
+      environment: "production"
+
+# Notes:
+# 
+# After adding a source, set the required environment variables:
+# 
+# For weather_api (API Key):
+#   WEATHER_API_API_KEY=your_api_key_here
+# 
+# For github_api (Bearer Token):
+#   GITHUB_API_API_TOKEN=your_github_token_here
+# 
+# For salesforce_crm (OAuth2):
+#   SALESFORCE_CRM_CLIENT_ID=your_client_id
+#   SALESFORCE_CRM_CLIENT_SECRET=your_client_secret
+# 
+# For internal_api (Basic Auth):
+#   INTERNAL_API_USERNAME=your_username
+#   INTERNAL_API_PASSWORD=your_password

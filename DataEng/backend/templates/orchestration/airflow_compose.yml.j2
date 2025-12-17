@@ -1,0 +1,18 @@
+services:
+  airflow:
+    image: apache/airflow:2.10.2
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      # Mount the generated ingestion script so Airflow can run it (via BashOperator or PythonOperator)
+      - ./ingestion_pipeline.py:/opt/airflow/ingestion_pipeline.py
+    command: standalone

@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # Base Services
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: metadata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  {% if stack.ingestion == 'Airbyte' %}
+  # Airbyte Services (Simplified for demo)
+  airbyte-server:
+    image: airbyte/server:latest
+    ports:
+      - "8001:8001"
+    environment:
+      - CONFIG_ROOT=/data
+    volumes:
+      - airbyte_data:/data
+  {% endif %}
+
+  {% if stack.ingestion == 'DLT' %}
+  # DLT Pipeline Runner
+  dlt_runner:
+    build: 
+      context: ./ingestion
+      dockerfile: Dockerfile.dlt
+  {% endif %}
+
+  {% if stack.orchestration == 'Airflow' %}
+  # Airflow
+  airflow-webserver:
+    image: apache/airflow:2.6.0
+    command: webserver
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://user:password@postgres/airflow
+    depends_on:
+      - postgres
+    volumes:
+      - ./orchestration/dags:/opt/airflow/dags
+  
+  airflow-scheduler:
+    image: apache/airflow:2.6.0
+    command: scheduler
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://user:password@postgres/airflow
+    depends_on:
+      - postgres
+    volumes:
+      - ./orchestration/dags:/opt/airflow/dags
+  {% endif %}
+
+  {% if stack.orchestration == 'Mage' %}
+  mage:
+    image: mageai/mageai:latest
+    ports:
+      - "6789:6789"
+    volumes:
+      - ./orchestration:/home/src
+  {% endif %}
+
+volumes:
+  postgres_data:
+  {% if stack.ingestion == 'Airbyte' %}
+  airbyte_data:
+  {% endif %}

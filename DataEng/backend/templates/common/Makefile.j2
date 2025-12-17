@@ -1,0 +1,95 @@
+# {{ project_name }} - Makefile
+# Standard tasks for development and operations
+
+PROJECT_NAME := {{ project_name }}
+COMPOSE_FILE := docker-compose.yml
+
+.DEFAULT_GOAL := help
+
+.PHONY: help
+help: ## Show this help message
+	@echo "🛠️  {{ project_name }} - Available Commands"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: up
+up: ## Start all infrastructure services
+	@echo "🚀 Starting infrastructure..."
+	docker-compose -f $(COMPOSE_FILE) up -d
+	@echo "✅ Services started. Use 'make logs' to view output."
+
+.PHONY: down
+down: ## Stop all services
+	@echo "🛑 Stopping services..."
+	docker-compose -f $(COMPOSE_FILE) down
+	@echo "✅ Services stopped."
+
+.PHONY: restart
+restart: down up ## Restart all services
+
+.PHONY: logs
+logs: ## View service logs
+	docker-compose -f $(COMPOSE_FILE) logs -f
+
+.PHONY: ps
+ps: ## Show running services
+	docker-compose -f $(COMPOSE_FILE) ps
+
+.PHONY: clean
+clean: ## Remove volumes and temporary files
+	@echo "🧹 Cleaning up..."
+	docker-compose -f $(COMPOSE_FILE) down -v
+	rm -rf .dlt/ logs/ target/ .pytest_cache/ __pycache__/
+	@echo "✅ Cleanup complete."
+
+{% if stack.transformation == 'dbt' %}
+.PHONY: dbt-run
+dbt-run: ## Run dbt transformations
+	@echo "🔄 Running dbt transformations..."
+	docker-compose run --rm dbt_runner dbt run
+	@echo "✅ dbt run complete."
+
+.PHONY: dbt-test
+dbt-test: ## Run dbt tests
+	@echo "🧪 Running dbt tests..."
+	docker-compose run --rm dbt_runner dbt test
+
+.PHONY: dbt-docs
+dbt-docs: ## Generate and serve dbt documentation
+	@echo "📚 Generating dbt docs..."
+	docker-compose run --rm dbt_runner dbt docs generate
+	docker-compose run --rm -p 8080:8080 dbt_runner dbt docs serve
+{% endif %}
+
+{% if stack.orchestration == 'airflow' %}
+.PHONY: airflow-init
+airflow-init: ## Initialize Airflow database (run once)
+	@echo "🔧 Initializing Airflow..."
+	docker-compose run --rm airflow-webserver airflow db init
+	docker-compose run --rm airflow-webserver airflow users create \
+		--username admin \
+		--firstname Admin \
+		--lastname User \
+		--role Admin \
+		--email admin@example.com \
+		--password admin
+	@echo "✅ Airflow initialized. Default credentials: admin/admin"
+{% endif %}
+
+.PHONY: shell
+shell: ## Open a shell in the main service container
+	docker-compose exec {{ stack.ingestion or stack.transformation or 'app' }} /bin/bash
+
+.PHONY: install
+install: ## Install Python dependencies locally
+	pip install -r requirements.txt
+
+.PHONY: test
+test: ## Run tests
+	pytest tests/
+
+.PHONY: lint
+lint: ## Run linters
+	flake8 .
+	black --check .
+	mypy .

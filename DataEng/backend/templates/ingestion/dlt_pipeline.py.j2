@@ -1,0 +1,284 @@
+"""
+{{ project_name }} DLT Data Pipeline
+=======================================
+Production-ready data ingestion pipeline using dlt (data load tool).
+
+Features:
+- Secrets management via secrets.toml and environment variables
+- Comprehensive error handling and retries
+- Data quality validation
+- Detailed logging and monitoring
+"""
+
+import dlt
+from dlt.common import pendulum
+import os
+import logging
+from typing import Iterator, Dict, Any, List
+from datetime import datetime, timedelta
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+logging.basicConfig(
+    level=os.getenv('LOG_LEVEL', 'INFO'),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('pipeline.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# DATA SOURCE CONFIGURATION
+# =============================================================================
+
+class PipelineConfig:
+    """Configuration management using environment variables and dlt.secrets"""
+    
+    def __init__(self):
+        # Use dlt.secrets for secure credential management
+        # Falls back to environment variables
+        self.api_url = dlt.secrets.get('sources.api_source.base_url', 
+                                       os.getenv('SOURCE_API_URL'))
+        self.api_key = dlt.secrets.get('sources.api_source.api_key',
+                                       os.getenv('SOURCE_API_KEY'))
+        
+        # Database configuration (if using DB source)
+        self.source_db_host = dlt.secrets.get('sources.source_db.host',
+                                              os.getenv('SOURCE_DB_HOST'))
+        self.source_db_name = dlt.secrets.get('sources.source_db.database',
+                                              os.getenv('SOURCE_DB_NAME'))
+        
+        # Runtime settings
+        self.batch_size = int(os.getenv('BATCH_SIZE', '1000'))
+        self.max_retries = int(os.getenv('MAX_RETRIES', '3'))
+        self.retry_delay = int(os.getenv('RETRY_DELAY_SECONDS', '5'))
+    
+    def validate(self):
+        """Validate required configuration"""
+        if not self.api_url and not self.source_db_host:
+            logger.warning("No data source configured, using mock data generator")
+            return False
+        return True
+
+
+config = PipelineConfig()
+
+
+# =============================================================================
+# DATA EXTRACTION
+# =============================================================================
+
+@dlt.resource(name="{{ project_name }}_data", write_disposition="append")
+def extract_data() -> Iterator[Dict[str, Any]]:
+    """
+    Main data extraction resource.
+    
+    This extracts data from your source (API, database, files, etc.)
+    and yields it to dlt for loading into the destination.
+    
+    Configuration is loaded from secrets.toml or environment variables.
+    """
+    
+    logger.info("Starting data extraction...")
+    
+    try:
+        if not config.validate():
+            # Demo mode: generate sample data
+            logger.info("Running in demo mode with mock data")
+            for i in range(10):
+                yield {
+                    "id": i + 1,
+                    "name": f"Item {i + 1}",
+                    "value": (i + 1) * 100,
+                    "created_at": datetime.utcnow().isoformat(),
+                    "category": f"Category {(i % 3) + 1}"
+                }
+            return
+        
+        # PRODUCTION CODE: Replace with your actual data source
+        # ---------------------------------------------------------
+        
+        # Example 1: REST API extraction
+        if config.api_url:
+            import requests
+            from requests.adapters import HTTPAdapter
+            from urllib3.util.retry import Retry
+            
+            # Configure retry strategy
+            retry_strategy = Retry(
+                total=config.max_retries,
+                backoff_factor=config.retry_delay,
+                status_forcelist=[429, 500, 502, 503, 504],
+            )
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            session = requests.Session()
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            
+            headers = {}
+            if config.api_key:
+                headers['Authorization'] = f'Bearer {config.api_key}'
+            
+            response = session.get(config.api_url, headers=headers)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Yield data in batches
+            if isinstance(data, list):
+                for item in data:
+                    yield item
+            else:
+                yield data
+        
+        # Example 2: Database extraction (PostgreSQL)
+        elif config.source_db_host:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            
+            conn = psycopg2.connect(
+                host=config.source_db_host,
+                database=config.source_db_name,
+                user=dlt.secrets.get('sources.source_db.username'),
+                password=dlt.secrets.get('sources.source_db.password')
+            )
+            
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # Incremental loading: fetch only new records
+            cursor.execute("""
+                SELECT * FROM source_table
+                WHERE updated_at > %s
+                ORDER BY updated_at
+            """, (dlt.current_timestamp(),))
+            
+            batch = []
+            for row in cursor:
+                batch.append(dict(row))
+                
+                if len(batch) >= config.batch_size:
+                    for item in batch:
+                        yield item
+                    batch = []
+            
+            # Yield remaining items
+            for item in batch:
+                yield item
+            
+            cursor.close()
+            conn.close()
+        
+        logger.info("Data extraction completed successfully")
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API request failed: {e}")
+        raise
+    except psycopg2.Error as e:
+        logger.error(f"Database error: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during extraction: {e}")
+        raise
+
+
+# =============================================================================
+# DATA QUALITY VALIDATION
+# =============================================================================
+
+def validate_data_quality(load_info):
+    """
+    Validate data quality after loading.
+    
+    Args:
+        load_info: Information about the load returned by dlt
+    """
+    logger.info("Running data quality checks...")
+    
+    # Check if data was loaded
+    if not load_info.loads_ids:
+        logger.warning("No data was loaded")
+        return False
+    
+    # Get row counts
+    row_count = sum(load_info.loaded_packages[0].jobs.values() if load_info.loaded_packages else [])
+    logger.info(f"✓ Loaded {row_count} rows")
+    
+    # Additional checks can be added here:
+    # - Schema validation
+    # - Null value checks
+    # - Data distribution checks
+    # - Referential integrity
+    
+    return True
+
+
+# =============================================================================
+# MAIN PIPELINE EXECUTION
+# =============================================================================
+
+if __name__ == "__main__":
+    try:
+        start_time = datetime.utcnow()
+        logger.info("=" * 80)
+        logger.info(f"Starting {{ project_name }} pipeline at {start_time}")
+        logger.info("=" * 80)
+        
+        # Configure destination from secrets or environment
+        destination_type = dlt.secrets.get('destination.type', 
+                                          os.getenv('DLT_DESTINATION', '{% if stack.storage == "PostgreSQL" %}postgres{% elif stack.storage == "Snowflake" %}snowflake{% elif stack.storage == "BigQuery" %}bigquery{% else %}duckdb{% endif %}'))
+        
+        dataset_name = os.getenv('DLT_DATASET_NAME', '{{ project_name }}_raw')
+        
+        logger.info(f"Destination: {destination_type}")
+        logger.info(f"Dataset: {dataset_name}")
+        
+        # Create pipeline instance
+        pipeline = dlt.pipeline(
+            pipeline_name="{{ project_name }}_ingestion",
+            destination=destination_type,
+            dataset_name=dataset_name,
+            progress="enlighten"  # Show progress bar
+        )
+        
+        # Run the pipeline
+        logger.info("Executing data extraction and load...")
+        load_info = pipeline.run(
+            extract_data(),
+            table_name="{{ project_name }}_data",
+            write_disposition="append"  # or "replace" or "merge"
+        )
+        
+        # Validate data quality
+        validation_passed = validate_data_quality(load_info)
+        
+        # Log completion
+        end_time = datetime.utcnow()
+        duration = (end_time - start_time).total_seconds()
+        
+        logger.info("=" * 80)
+        logger.info(f"Pipeline completed successfully in {duration:.2f} seconds")
+        logger.info(f"Load IDs: {load_info.loads_ids}")
+        logger.info("=" * 80)
+        
+        # Print detailed load information
+        print("\nLoad Information:")
+        print(load_info)
+        
+        # Exit with success code
+        exit(0 if validation_passed else 1)
+        
+    except dlt.common.exceptions.DestinationConnectionError as e:
+        logger.error(f"Failed to connect to destination: {e}")
+        logger.error("Check your destination configuration in secrets.toml or environment variables")
+        exit(1)
+        
+    except Exception as e:
+        logger.error(f"Pipeline failed with error: {e}")
+        logger.exception("Full traceback:")
+        exit(1)
+

@@ -1,0 +1,145 @@
+import dlt
+from dlt.sources.helpers import requests
+import os
+from typing import Any, Iterator
+
+@dlt.source(name="{{ source.name }}")
+def {{ source.name }}_source():
+    """
+    Extracts data from {{ source.name }}
+    Base URL: {{ source.config.base_url }}
+    
+    {% if source.config.description -%}
+    {{ source.config.description }}
+    {%- endif %}
+    """
+    
+    @dlt.resource(
+        write_disposition="{{ source.config.write_disposition | default('append') }}",
+        {% if source.config.primary_key -%}
+        primary_key="{{ source.config.primary_key }}",
+        {%- endif %}
+        name="{{ source.config.endpoint_name | default('data') }}"
+    )
+    def fetch_{{ source.config.endpoint_name | default('data') }}() -> Iterator[Any]:
+        """
+        Fetches data from {{ source.config.endpoint | default('/') }}
+        """
+        # Prepare authentication
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        {% if source.auth.type == 'bearer' -%}
+        # Bearer token authentication
+        token = os.getenv("{{ source.name | upper }}_API_TOKEN")
+        if not token:
+            raise ValueError("Missing environment variable: {{ source.name | upper }}_API_TOKEN")
+        headers["Authorization"] = f"Bearer {token}"
+        
+        {% elif source.auth.type == 'api_key' -%}
+        # API Key authentication
+        api_key = os.getenv("{{ source.name | upper }}_API_KEY")
+        if not api_key:
+            raise ValueError("Missing environment variable: {{ source.name | upper }}_API_KEY")
+        {% if source.auth.location == 'header' -%}
+        headers["{{ source.auth.key_name | default('X-API-Key') }}"] = api_key
+        {%- endif %}
+        
+        {% elif source.auth.type == 'oauth2' -%}
+        # OAuth2 authentication - obtain token first
+        client_id = os.getenv("{{ source.name | upper }}_CLIENT_ID")
+        client_secret = os.getenv("{{ source.name | upper }}_CLIENT_SECRET")
+        
+        if not client_id or not client_secret:
+            raise ValueError("Missing OAuth2 credentials")
+        
+        # Get access token
+        token_response = requests.post(
+            "{{ source.auth.token_url }}",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret
+            }
+        )
+        token_response.raise_for_status()
+        access_token = token_response.json()["access_token"]
+        headers["Authorization"] = f"Bearer {access_token}"
+        
+        {% elif source.auth.type == 'basic' -%}
+        # Basic authentication
+        username = os.getenv("{{ source.name | upper }}_USERNAME")
+        password = os.getenv("{{ source.name | upper }}_PASSWORD")
+        if not username or not password:
+            raise ValueError("Missing basic auth credentials")
+        auth = (username, password)
+        {%- endif %}
+        
+        # Prepare request parameters
+        params = {}
+        {% if source.config.params -%}
+        {% for key, value in source.config.params.items() -%}
+        params["{{ key }}"] = "{{ value }}"
+        {% endfor -%}
+        {%- endif %}
+        
+        {% if source.auth.type == 'api_key' and source.auth.location == 'query' -%}
+        params["{{ source.auth.key_name | default('api_key') }}"] = api_key
+        {%- endif %}
+        
+        # Make request
+        url = "{{ source.config.base_url }}{{ source.config.endpoint | default('/') }}"
+        
+        try:
+            response = requests.get(
+                url,
+                headers=headers,
+                params=params,
+                {% if source.auth.type == 'basic' -%}
+                auth=auth,
+                {%- endif %}
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            {% if source.config.data_path -%}
+            # Extract nested data using path
+            for key in "{{ source.config.data_path }}".split("."):
+                if isinstance(data, dict):
+                    data = data.get(key, [])
+                else:
+                    break
+            {%- endif %}
+            
+            # Yield data
+            if isinstance(data, list):
+                yield from data
+            else:
+                yield data
+        
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching data from {{ source.name }}: {e}")
+            raise
+    
+    return fetch_{{ source.config.endpoint_name | default('data') }}
+
+
+if __name__ == "__main__":
+    # Configure DLT pipeline
+    pipeline = dlt.pipeline(
+        pipeline_name="{{ source.name }}_pipeline",
+        destination="{{ destination }}",
+        dataset_name="{{ dataset_name }}"
+    )
+    
+    # Run extraction
+    print(f"Starting extraction from {{ source.name }}...")
+    load_info = pipeline.run({{ source.name }}_source())
+    
+    print(f"✅ Extraction completed!")
+    print(f"Loaded {load_info.metrics.get('rows_loaded', 0)} rows")
+    print(load_info)

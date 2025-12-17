@@ -1,0 +1,108 @@
+terraform {
+  required_providers {
+    {% if cloud_provider == 'aws' %}
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 4.0"
+    }
+    {% elif cloud_provider == 'gcp' %}
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 4.0"
+    }
+    {% endif %}
+  }
+}
+
+provider "{{ cloud_provider }}" {
+  {% if cloud_provider == 'aws' %}
+  region = "{{ aws_region | default('us-east-1') }}"
+  {% elif cloud_provider == 'gcp' %}
+  project = "{{ gcp_project_id }}"
+  region  = "{{ gcp_region | default('us-central1') }}"
+  {% endif %}
+}
+
+variable "environment" {
+  description = "Execution environment"
+  default     = "{{ environment | default('dev') }}"
+}
+
+variable "project_name" {
+  description = "Project name"
+  default     = "{{ project_name }}"
+}
+
+{% if cloud_provider == 'aws' %}
+# --- AWS Resources ---
+
+# S3 Bucket for Data Lake
+resource "aws_s3_bucket" "data_lake" {
+  bucket = "${var.project_name}-${var.environment}-datalake"
+  force_destroy = true
+
+  tags = {
+    Name        = "${var.project_name}-datalake"
+    Environment = var.environment
+  }
+}
+
+resource "aws_s3_bucket_acl" "data_lake_acl" {
+  bucket = aws_s3_bucket.data_lake.id
+  acl    = "private"
+}
+
+# RDS Postgres Instance
+resource "aws_db_instance" "metadata_db" {
+  allocated_storage    = 20
+  db_name              = replace("${var.project_name}_db", "-", "_")
+  engine               = "postgres"
+  engine_version       = "13.7"
+  instance_class       = "db.t3.micro"
+  username             = "{{ db_user | default('postgres') }}"
+  password             = "{{ db_password }}" # In prod use AWS Secrets Manager
+  parameter_group_name = "default.postgres13"
+  skip_final_snapshot  = true
+  publicly_accessible  = false
+
+  tags = {
+    Name = "${var.project_name}-db"
+  }
+}
+
+{% elif cloud_provider == 'gcp' %}
+# --- GCP Resources ---
+
+# GCS Bucket
+resource "google_storage_bucket" "data_lake" {
+  name          = "${var.project_name}-${var.environment}-datalake"
+  location      = "{{ gcp_region | default('US') }}"
+  force_destroy = true
+  
+  uniform_bucket_level_access = true
+}
+
+# Cloud SQL (Postgres)
+resource "google_sql_database_instance" "metadata_db" {
+  name             = "${var.project_name}-${var.environment}-db"
+  database_version = "POSTGRES_13"
+  region           = "{{ gcp_region | default('us-central1') }}"
+
+  settings {
+    tier = "db-f1-micro"
+  }
+  
+  deletion_protection = false # For demo purposes
+}
+
+resource "google_sql_database" "database" {
+  name     = "${var.project_name}_db"
+  instance = google_sql_database_instance.metadata_db.name
+}
+
+resource "google_sql_user" "users" {
+  name     = "{{ db_user | default('postgres') }}"
+  instance = google_sql_database_instance.metadata_db.name
+  password = "{{ db_password }}"
+}
+{% endif %}

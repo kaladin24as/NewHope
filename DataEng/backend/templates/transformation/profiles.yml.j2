@@ -1,0 +1,129 @@
+{{ project_name }}:
+  target: "{{'{{'}} env_var('DBT_TARGET', 'dev') {{'}}'}}"
+  
+  outputs:
+    dev:
+      type: {% if storage == "PostgreSQL" %}postgres{% elif storage == "Snowflake" %}snowflake{% elif storage == "BigQuery" %}bigquery{% elif storage == "DuckDB" %}duckdb{% else %}postgres{% endif %}
+      
+      {% if storage == "PostgreSQL" %}
+      # PostgreSQL configuration
+      host: "{{'{{'}} env_var('DB_HOST') {{'}}'}}"
+      port: "{{'{{'}} env_var('DB_PORT') | int {{'}}'}}"
+      user: "{{'{{'}} env_var('DB_USER') {{'}}'}}"
+      password: "{{'{{'}} env_var('DB_PASSWORD') {{'}}'}}"
+      dbname: "{{'{{'}} env_var('DB_NAME') {{'}}'}}"
+      schema: dev_analytics
+      threads: 4
+      keepalives_idle: 0
+      connect_timeout: 10
+      
+      {% elif storage == "Snowflake" %}
+      # Snowflake configuration
+      account: "{{'{{'}} env_var('SNOWFLAKE_ACCOUNT') {{'}}'}}"
+      user: "{{'{{'}} env_var('SNOWFLAKE_USER') {{'}}'}}"
+      password: "{{'{{'}} env_var('SNOWFLAKE_PASSWORD') {{'}}'}}"
+      role: "{{'{{'}} env_var('SNOWFLAKE_ROLE') {{'}}'}}"
+      warehouse: "{{'{{'}} env_var('SNOWFLAKE_WAREHOUSE') {{'}}'}}"
+      database: "{{'{{'}} env_var('SNOWFLAKE_DATABASE') {{'}}'}}"
+      schema: DEV_ANALYTICS
+      threads: 8
+      client_session_keep_alive: false
+      query_tag: dbt_dev
+      
+      {% elif storage == "BigQuery" %}
+      # BigQuery configuration
+      method: service-account
+      project: "{{'{{'}} env_var('GCP_PROJECT_ID') {{'}}'}}"
+      dataset: dev_analytics
+      threads: 4
+      timeout_seconds: 300
+      location: US
+      priority: interactive
+      keyfile: "{{'{{'}} env_var('GOOGLE_APPLICATION_CREDENTIALS') {{'}}'}}"
+      
+      {% elif storage == "DuckDB" %}
+      # DuckDB configuration
+      path: "{{'{{'}} env_var('DUCKDB_PATH', './data/dev.duckdb') {{'}}'}}"
+      schema: dev_analytics
+      threads: 4
+      {% endif %}
+    
+    staging:
+      type: {% if storage == "PostgreSQL" %}postgres{% elif storage == "Snowflake" %}snowflake{% elif storage == "BigQuery" %}bigquery{% elif storage == "DuckDB" %}duckdb{% else %}postgres{% endif %}
+      
+      {% if storage == "PostgreSQL" %}
+      # PostgreSQL staging
+      host: "{{'{{'}} env_var('DB_HOST') {{'}}'}}"
+      port: "{{'{{'}} env_var('DB_PORT') | int {{'}}'}}"
+      user: "{{'{{'}} env_var('DB_USER') {{'}}'}}"
+      password: "{{'{{'}} env_var('DB_PASSWORD') {{'}}'}}"
+      dbname: "{{'{{'}} env_var('DB_NAME') {{'}}'}}"
+      schema: staging_analytics
+      threads: 8
+      
+      {% elif storage == "Snowflake" %}
+      # Snowflake staging
+      account: "{{'{{'}} env_var('SNOWFLAKE_ACCOUNT') {{'}}'}}"
+      user: "{{'{{'}} env_var('SNOWFLAKE_USER') {{'}}'}}"
+      password: "{{'{{'}} env_var('SNOWFLAKE_PASSWORD') {{'}}'}}"
+      role: "{{'{{'}} env_var('SNOWFLAKE_ROLE') {{'}}'}}"
+      warehouse: "{{'{{'}} env_var('SNOWFLAKE_WAREHOUSE') {{'}}'}}"
+      database: "{{'{{'}} env_var('SNOWFLAKE_DATABASE') {{'}}'}}"
+      schema: STAGING_ANALYTICS
+      threads: 12
+      
+      {% elif storage == "BigQuery" %}
+      # BigQuery staging
+      method: service-account
+      project: "{{'{{'}} env_var('GCP_PROJECT_ID') {{'}}'}}"
+      dataset: staging_analytics
+      threads: 8
+      keyfile: "{{'{{'}} env_var('GOOGLE_APPLICATION_CREDENTIALS') {{'}}'}}"
+      
+      {% elif storage == "DuckDB" %}
+      # DuckDB staging
+      path: "{{'{{'}} env_var('DUCKDB_PATH', './data/staging.duckdb') {{'}}'}}"
+      schema: staging_analytics
+      threads: 8
+      {% endif %}
+    
+    prod:
+      type: {% if storage == "PostgreSQL" %}postgres{% elif storage == "Snowflake" %}snowflake{% elif storage == "BigQuery" %}bigquery{% elif storage == "DuckDB" %}duckdb{% else %}postgres{% endif %}
+      
+      {% if storage == "PostgreSQL" %}
+      # PostgreSQL production
+      host: "{{'{{'}} env_var('DB_HOST') {{'}}'}}"
+      port: "{{'{{'}} env_var('DB_PORT') | int {{'}}'}}"
+      user: "{{'{{'}} env_var('DB_USER') {{'}}'}}"
+      password: "{{'{{'}} env_var('DB_PASSWORD') {{'}}'}}"
+      dbname: "{{'{{'}} env_var('DB_NAME') {{'}}'}}"
+      schema: prod_analytics
+      threads: 16
+      
+      {% elif storage == "Snowflake" %}
+      # Snowflake production
+      account: "{{'{{'}} env_var('SNOWFLAKE_ACCOUNT') {{'}}'}}"
+      user: "{{'{{'}} env_var('SNOWFLAKE_USER') {{'}}'}}"
+      password: "{{'{{'}} env_var('SNOWFLAKE_PASSWORD') {{'}}'}}"
+      role: "{{'{{'}} env_var('SNOWFLAKE_ROLE') {{'}}'}}"
+      warehouse: "{{'{{'}} env_var('SNOWFLAKE_WAREHOUSE') {{'}}'}}"
+      database: "{{'{{'}} env_var('SNOWFLAKE_DATABASE') {{'}}'}}"
+      schema: PROD_ANALYTICS
+      threads: 20
+      query_tag: dbt_prod
+      
+      {% elif storage == "BigQuery" %}
+      # BigQuery production
+      method: service-account
+      project: "{{'{{'}} env_var('GCP_PROJECT_ID') {{'}}'}}"
+      dataset: prod_analytics
+      threads: 16
+      maximum_bytes_billed: 1000000000  # 1GB limit
+      keyfile: "{{'{{'}} env_var('GOOGLE_APPLICATION_CREDENTIALS') {{'}}'}}"
+      
+      {% elif storage == "DuckDB" %}
+      # DuckDB production
+      path: "{{'{{'}} env_var('DUCKDB_PATH', './data/prod.duckdb') {{'}}'}}"
+      schema: prod_analytics
+      threads: 16
+      {% endif %}

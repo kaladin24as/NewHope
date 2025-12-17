@@ -1,0 +1,61 @@
+# AntiGravity Platform - Docker Compose
+# Development environment for the AntiGravity data platform generator
+
+version: '3.8'
+
+services:
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENV=development
+    volumes:
+      - ./backend:/app
+      - generated_projects:/generated
+    networks:
+      - antigravity_net
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Streamlit UI
+  streamlit:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    volumes:
+      - ./ui:/app
+    networks:
+      - antigravity_net
+    depends_on:
+      - backend
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+
+  # PostgreSQL (for testing generated projects)
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: test_warehouse
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - antigravity_net
+
+volumes:
+  generated_projects:
+  postgres_data:
+
+networks:
+  antigravity_net:
+    driver: bridge
