@@ -1,8 +1,8 @@
-# 🚀 AntiGravity - Data Project Generator
+# 🚀 NewHope - Data Project Generator
 
 **Generate production-ready data engineering projects in seconds**
 
-AntiGravity is a powerful platform that automatically generates complete data engineering stacks with Docker, orchestration, transformation, and infrastructure as code. Choose your tools, click generate, and get a fully configured project ready to deploy.
+NewHope is a powerful platform that automatically generates complete data engineering stacks with Docker, orchestration, transformation, and infrastructure as code. Choose your tools, click generate, and get a fully configured project ready to deploy.
 
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -263,3 +263,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with ❤️ for Data Engineers**
+
